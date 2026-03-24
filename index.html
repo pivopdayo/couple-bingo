@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>健太とかほりの正解は一年後！</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 /*
   COLOR PAIRS (bg → text):
@@ -210,14 +212,20 @@ body {
 /* modal head: sticky so close button always visible */
 .modal-head {
   background: var(--orange);
-  padding: 14px 18px 12px;
-  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding: 12px 16px;
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
   position:sticky; top:0; z-index:10; flex-shrink:0;
 }
-.modal-num { font-size:10px; color:var(--sage); margin-bottom:3px; letter-spacing:0.1em; opacity:0.8; }
-.modal-title-text { font-size:17px; font-weight:700; color:var(--sage); line-height:1.3; }
-.modal-close { background:none; border:none; font-size:22px; cursor:pointer; color:var(--sage); line-height:1; flex-shrink:0; }
-
+.modal-head-left { flex:1; min-width:0; }
+.modal-num { font-size:10px; color:var(--sage); margin-bottom:2px; letter-spacing:0.1em; opacity:0.8; }
+.modal-title-text { font-size:15px; font-weight:700; color:var(--sage); line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.modal-close {
+  background: rgba(255,255,255,0.25);
+  border: none; font-size:18px; cursor:pointer; color:var(--sage);
+  line-height:1; flex-shrink:0;
+  width:36px; height:36px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+}
 .modal-body { padding:12px 14px 28px; }
 
 /* rule box: teal bg, orange text */
@@ -389,7 +397,7 @@ input[type=file] { display:none; }
       <div class="header-sub">健太とかほりの</div>
       <div class="header-main">正解は一年後！</div>
     </div>
-    <button class="edit-names-btn" id="editNamesBtn">名前を変える</button>
+    <button class="edit-names-btn" onclick="openNameModal()">名前を変える</button>
   </div>
   <div class="score-bar">
     <div class="score-player p1">
@@ -499,7 +507,7 @@ input[type=file] { display:none; }
 </div>
 
 <!-- NAME MODAL -->
-<div class="name-overlay" id="nameOverlay">
+<div class="name-overlay" id="nameOverlay" onclick="nameOverlayClick(event)">
   <div class="name-card">
     <div class="name-card-title">プレイヤー名を設定</div>
     <div class="name-row">
@@ -510,7 +518,7 @@ input[type=file] { display:none; }
       <div class="name-dot" style="background:var(--pink)"></div>
       <input type="text" class="name-inp" id="name-inp2" placeholder="Player 2の名前">
     </div>
-    <button class="name-save" id="nameSaveBtn">保存</button>
+    <button class="name-save" onclick="saveNames()">保存</button>
   </div>
 </div>
 
@@ -522,7 +530,7 @@ input[type=file] { display:none; }
 
 <div class="toast" id="toast"></div>
 
-<script type="module">
+<script>
 const CELLS_DATA = [
   { id:1,  title:"画数の多い\n駅名",         rule:"自分も写った写真をアップ。画数が多いほど勝ち。" },
   { id:2,  title:"一番金額が\n高い飲み物",    rule:"飲まなくてもOK。メニューなどの写真をアップ。金額が高い方が勝ち。" },
@@ -551,10 +559,7 @@ const CELLS_DATA = [
   { id:25, title:"隣の人の\n不思議話",         rule:"隣にいた人の不思議な話・行動を記録。文章で入力。最終ジャッジは12/31。" },
 ];
 
-// ===== FIREBASE CONFIG =====
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
+// ===== FIREBASE INIT =====
 const firebaseConfig = {
   apiKey: "AIzaSyCe_8laPljjBiRokv3NP23D43ateJhAbIQ",
   authDomain: "couple-bingo-19a1a.firebaseapp.com",
@@ -563,9 +568,10 @@ const firebaseConfig = {
   messagingSenderId: "170307868892",
   appId: "1:170307868892:web:838a44876ffd2644f2bc19"
 };
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+async function loadFirebase() { /* already loaded */ }
 
 // ===== CLOUDINARY CONFIG =====
 // ★ここにCloudinaryの情報を入れる（後で差し替え）
@@ -583,14 +589,14 @@ let tempPhotos = { p1:[], p2:[] }; // URLの配列
 // ===== FIRESTORE SYNC =====
 async function save() {
   try {
-    await setDoc(doc(db, 'bingo', 'shared'), { cellStates, names });
+    await db.collection('bingo').doc('shared').set({ cellStates, names });
   } catch(e) { showToast('保存に失敗しました'); console.error(e); }
 }
 
 async function load() {
   try {
-    const snap = await getDoc(doc(db, 'bingo', 'shared'));
-    if (snap.exists()) {
+    const snap = await db.collection('bingo').doc('shared').get();
+    if (snap.exists) {
       const data = snap.data();
       if (data.cellStates) cellStates = data.cellStates;
       if (data.names) names = data.names;
@@ -598,10 +604,9 @@ async function load() {
   } catch(e) { console.error(e); }
 }
 
-// リアルタイム同期：相手が更新したら自動反映
 function startRealtimeSync() {
-  onSnapshot(doc(db, 'bingo', 'shared'), (snap) => {
-    if (snap.exists()) {
+  db.collection('bingo').doc('shared').onSnapshot((snap) => {
+    if (snap.exists) {
       const data = snap.data();
       if (data.cellStates) cellStates = data.cellStates;
       if (data.names) names = data.names;
@@ -788,7 +793,10 @@ async function saveCell() {
     p1:{ checked:currentChecks.p1, date:document.getElementById('date-p1').value, record:document.getElementById('record-p1').value, memo:document.getElementById('memo-p1').value, photos:[...tempPhotos.p1] },
     p2:{ checked:currentChecks.p2, date:document.getElementById('date-p2').value, record:document.getElementById('record-p2').value, memo:document.getElementById('memo-p2').value, photos:[...tempPhotos.p2] }
   };
-  await save(); renderGrid(); closeModal(); showToast('保存しました！');
+  await save();
+  renderGrid();
+  closeModal();
+  showToast('✅ 保存しました！');
 }
 function openNameModal() {
   document.getElementById('name-inp1').value=names.p1;
@@ -818,11 +826,6 @@ async function init() {
   await load();
   renderGrid();
   startRealtimeSync();
-
-  // イベント登録（type=moduleではonclick属性が外部から見えないため）
-  document.getElementById('editNamesBtn').addEventListener('click', openNameModal);
-  document.getElementById('nameSaveBtn').addEventListener('click', saveNames);
-  document.getElementById('nameOverlay').addEventListener('click', nameOverlayClick);
 }
 init();
 </script>
